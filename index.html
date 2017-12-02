@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Hello, world!</title>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/css/bootstrap.min.css" integrity="sha384-PsH8R72JQ3SOdhVi3uxftmaW6Vc51MKb0q5P2rRUpPvrszuE4W1povHYgTpBfshb" crossorigin="anonymous">
+</head>
+<body>
+    <h1>Hello, world!</h1>
+
+    <!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js" integrity="sha384-vFJXuSJphROIrBnz7yo7oB41mKfc8JzQZiCq4NCceLEaO4IHwicKwpJf9c9IpFgh" crossorigin="anonymous"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.min.js" integrity="sha384-alpBpkh1PFOepccYVYDB4do5UnbKysX5WZXm3XxPqe5iKTfUKjNkCk9SaVuEZflJ" crossorigin="anonymous"></script>
+    <script>
+    (function (){
+
+        var badmintonGa = function(){
+
+            var populationSize = 100;
+            var nMatches = 5;
+            this.players = [];
+            this.courts = [];
+
+            var chromosomes = [];
+            var chromosomeFitnesses = [];
+
+            function createPopulation(n) {
+                var chromosomeLength = 0;
+                var nMatchSlots = 0;
+                // count the number of player slots per nMatches
+                for (i = 0; i < courts.length; i++) {
+                    if (courts[i].type == "double") {
+                        nMatchSlots += 4;
+                    } else if (courts[i].type == "single") {
+                        nMatchSlots += 2;
+                    }
+                }
+
+                for (i = 0; i < n; i++) {
+                    chromosomes[i] = [];
+
+                    for (j = 0; j < nMatches; j++) {
+                        // fill player vector
+                        var playerIdx = [];
+                        for (k = 0; k < players.length; k++) {
+                            playerIdx.push(k);
+                        }
+                        // populate match slots
+                        var slots = [];
+                        for (k = 0; k < nMatchSlots; k++) {
+                            // choose a player at random
+                            var idx = Math.round(Math.random()*(playerIdx.length-1));
+                            // add the player to the current match
+                            slots.push(playerIdx[idx]);
+                            // remove the player from roster
+                            playerIdx.splice(idx,1);
+                        }
+                        chromosomes[i] = chromosomes[i].concat(slots);
+                    }
+                }
+            }
+
+            function fitness() {
+                // loop over each population member
+                for (i = 0; i < chromosomes.length; i++) {
+                    var matchMap = new Map();
+                    var pairMap = new Map();
+                    var idx = 0;
+
+                    var skillScore = 0;
+                    var matchScore = 0;
+                    var playerScore = 0;
+
+                    // loop over each mach in chromosome
+                    for (j = 0; j < nMatches; j++) {
+
+                        // loop over each match
+                        for (k = 0; k < courts.length; k++) {
+
+                            if (courts[k].type == "double") {
+                                var player1 = chromosomes[i][idx++];
+                                var player2 = chromosomes[i][idx++];
+                                var player3 = chromosomes[i][idx++];
+                                var player4 = chromosomes[i][idx++];
+
+                                // skill score
+                                skillScore += Math.abs((players[player1].rank+players[player2].rank)-(players[player3].rank+players[player3].rank));
+
+                                // pair scoring
+                                if (pairMap.has([player1, player2])) {
+                                    playerScore++;
+                                } else {
+                                    pairMap.set([player1, player2], true);
+                                    pairMap.set([player2, player1], true);
+                                }
+                                if (pairMap.has([player3, player4])) {
+                                    playerScore++;
+                                } else {
+                                    pairMap.set([player3, player4], true);
+                                    pairMap.set([player4, player3], true);
+                                }
+
+                                // match scoring
+                                if (matchMap.has([player1, player2, player3, player4])) {
+                                    matchScore++;
+                                } else {
+                                    matchMap.set([player1, player2, player3, player4], true);
+                                    matchMap.set([player2, player1, player3, player4], true);
+                                    matchMap.set([player1, player2, player4, player3], true);
+                                    matchMap.set([player2, player1, player4, player3], true);
+                                }
+                            } else if (courts[k].type == "single") {
+                                var player1 = chromosomes[i][idx++];
+                                var player2 = chromosomes[i][idx++];
+
+                                // skill score
+                                skillScore += Math.abs(players[player1].rank-players[player2].rank);
+
+                                // match scoring
+                                if (matchMap.has([player1, player2])) {
+                                    matchScore++;
+                                } else {
+                                    matchMap.set([player1, player2], true);
+                                    matchMap.set([player2, player1], true);
+                                }
+                            }
+                        }
+                    }
+                    // need to normalise scores...
+                    // skillScore is divided by maxSkillScore multiplied by the number of nMatches
+                    // playerScore is divided by the number pairs playing
+                    // matchScore is divided by the number of matches in game
+                    chromosomeFitnesses[i] = skillScore+playerScore+matchScore;
+                }
+            }
+
+            function crossover() {
+                // pair of parents, swap whole matches
+            }
+
+            function mutator() {
+                // swap people about within a match
+            }
+
+            return {
+                init: function(players, courts) {
+                    this.players = players;
+                    this.courts = courts;
+
+                    createPopulation(populationSize);
+                    fitness();
+                },
+                step: function() {
+
+
+                }
+            }
+        };
+
+        var players = [];
+        players.push({name: "Rob", rank: 5});
+        players.push({name: "Ollie", rank: 5});
+        players.push({name: "Dom", rank: 5});
+        players.push({name: "Liz", rank: 2});
+        players.push({name: "Andy", rank: 3});
+        players.push({name: "Jane", rank: 3});
+        players.push({name: "Eddie", rank: 4});
+        players.push({name: "Hannah", rank: 2});
+        players.push({name: "New Jane", rank: 3});
+        players.push({name: "Dave", rank: 2});
+        players.push({name: "Sam", rank: 3});
+        players.push({name: "Nigel", rank: 3});
+        players.push({name: "Sandy", rank: 3});
+
+        console.log(players);
+
+        var courts = [];
+        courts.push({type: "double"});
+        courts.push({type: "double"});
+        courts.push({type: "single"});
+
+        var ga = badmintonGa();
+
+        console.log(ga);
+
+        ga.init(players, courts);
+    })();
+    </script>
+</body>
+</html>
