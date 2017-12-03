@@ -20,13 +20,160 @@
     <script>
     (function (){
 
+        var chromosome = function(){
+
+            var rounds;
+            var currentFitness;
+
+            function init() {
+
+            }
+
+            function fitness(players) {
+                var roundScore = 0;
+                // loop over each round
+                rounds.forEach(function(round){
+                    // loop over each match
+                    var matchScore = 0;
+                    round.forEach(function(match){
+                        // check that match contains only two teams
+                        if (match.length != 2) {
+                            throw new Error("Match did not contain two teams!");
+                        }
+                        var rank0 = 0;
+                        match[0].forEach(function(p){
+                            rank0 += players[p].rank;
+                        });
+                        var rank1 = 0;
+                        match[1].forEach(function(p){
+                            rank1 += players[p].rank;
+                        });
+                        // aggregate the difference in skill across match
+                        matchScore += Math.abs(rank0-rank1);
+                    });
+                    // normalise by number of matches in round - average rank
+                    // delta per match
+                    roundScore += matchScore/round.length;
+                });
+                // normalise by number of rounds - averange rank delta per round
+                currentFitness = roundScore/rounds.length;
+            }
+
+            function round2array(round) {
+                var roundArray = [];
+                round.forEach(function(match){
+                    match.forEach(function(team){
+                        team.forEach(function(player){
+                            roundArray.push(player);
+                        });
+                    });
+                });
+                return roundArray;
+            }
+
+            function array2round(roundArray, roundTemplate){
+                var round = [];
+                roundTemplate.forEach(function(matchTemplate){
+                    match = [];
+                    matchTemplate.forEach(function(teamTemplate){
+                        team = [];
+                        teamTemplate.forEach(function(playerTemplate){
+                            team.push(roundArray.pop());
+                        });
+                        match.push(team);
+                    });
+                    round.push(match);
+                });
+                return round;
+            }
+
+            function mutate(p) {
+                // mutations involve swapping players within a round, this
+                // ensures that round remains valid after the mutation.
+                var mutatedRounds = [];
+                rounds.forEach(function(round){
+
+                    var roundArray = round2array(round);
+
+                    // loop over each gene (player slot) in round
+                    for (i = 0; i < roundArray.length; i++) {
+                        // roll the dice...
+                        if (Math.random() > p) {
+                            continue;
+                        }
+                        // gene has been selected for mutation - select a player
+                        // to swap with
+                        var j = Math.round(Math.random()*(roundArray.length-1));
+                        while (j == i){
+                            j = Math.round(Math.random()*(roundArray.length-1));
+                        }
+                        var swap = roundArray[j];
+                        roundArray[j] = roundArray[i];
+                        roundArray[i] = swap;
+                    }
+                    mutatedRounds.push(array2round(roundArray,round));
+                });
+                rounds = mutatedRounds;
+            }
+
+            function crossover(mate, p) {
+                // crossover operator involves selecting complete rounds from a
+                // pair of parents. It's quite straightforward and yeilds valid
+                // matches, although can cause the same person to sit out more
+                // often.
+                var mateRounds = mate.getRounds();
+                var childRounds = [];
+                for (i = 0; i < rounds.length; i++) {
+                    // roll the dice
+                    if (Math.random() > p) {
+                        // take from this parent
+                        childRounds.push(rounds[i]);
+                    } else {
+                        // take from mate
+                        childRounds.push(mateRounds[i]);
+                    }
+                }
+                var child = new chromosome();
+                child.setRounds(childRounds);
+                return child;
+            }
+
+            function printRounds(players) {
+                for (i = 0; i < rounds.length; i++) {
+                    console.log("Round %d:", i);
+                    for (j = 0; j < rounds[i].length; j++) {
+                        console.log("\tMatch %d:", j)
+                        for (k = 0; k < rounds[i][j].length; k++) {
+                            console.log("\t\tTeam %d:", k);
+                            for (l = 0; l < rounds[i][j][k].length; l++) {
+                                console.log("\t\t\t%s", players[rounds[i][j][k][l]].name);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return {
+                fitness: fitness,
+                mutate: mutate,
+                crossover: crossover,
+                printRounds: printRounds,
+                getRounds: function() {return rounds;},
+                setRounds: function(r) {rounds = r;},
+                getFitness: function() {return currentFitness;}
+            }
+        };
+
         var badmintonGa = function(){
 
-            var populationSize = 100;
+            var populationSize = 500;
             var nMatches = 5;
+            var cullRate = 0.50;
             this.players = [];
             this.courts = [];
 
+            var best = [];
+            var bestScore = 999;
             var chromosomes = [];
             var chromosomeFitnesses = [];
 
@@ -43,26 +190,47 @@
                 }
 
                 for (i = 0; i < n; i++) {
-                    chromosomes[i] = [];
-
+                    rounds = [];
                     for (j = 0; j < nMatches; j++) {
                         // fill player vector
                         var playerIdx = [];
                         for (k = 0; k < players.length; k++) {
                             playerIdx.push(k);
                         }
-                        // populate match slots
-                        var slots = [];
-                        for (k = 0; k < nMatchSlots; k++) {
-                            // choose a player at random
-                            var idx = Math.round(Math.random()*(playerIdx.length-1));
-                            // add the player to the current match
-                            slots.push(playerIdx[idx]);
-                            // remove the player from roster
-                            playerIdx.splice(idx,1);
-                        }
-                        chromosomes[i] = chromosomes[i].concat(slots);
+                        matches = [];
+                        courts.forEach(function(court){
+                            var teamSize = 0;
+                            if (court.type == "double") {
+                                teamSize = 2;
+                            } else if (court.type == "single") {
+                                teamSize = 1;
+                            }
+                            //
+                            var team0 = [];
+                            for (k = 0; k < teamSize; k++) {
+                                // choose a player at random
+                                var idx = Math.round(Math.random()*(playerIdx.length-1));
+                                // add the player to the current match
+                                team0.push(playerIdx[idx]);
+                                // remove the player from roster
+                                playerIdx.splice(idx,1);
+                            }
+                            var team1 = [];
+                            for (k = 0; k < teamSize; k++) {
+                                // choose a player at random
+                                var idx = Math.round(Math.random()*(playerIdx.length-1));
+                                // add the player to the current match
+                                team1.push(playerIdx[idx]);
+                                // remove the player from roster
+                                playerIdx.splice(idx,1);
+                            }
+                            matches.push([team0, team1]);
+                        });
+                        rounds.push(matches);
                     }
+                    var c = new chromosome();
+                    c.setRounds(rounds);
+                    chromosomes.push(c);
                 }
             }
 
@@ -140,12 +308,10 @@
                 }
             }
 
-            function crossover() {
-                // pair of parents, swap whole matches
-            }
-
-            function mutator() {
-                // swap people about within a match
+            function printChromosomes() {
+                for (i = 0; i < chromosomes.length; i++){
+                    console.log("[%d]:%f", i, chromosomes[i].getFitness());
+                }
             }
 
             return {
@@ -154,10 +320,41 @@
                     this.courts = courts;
 
                     createPopulation(populationSize);
-                    fitness();
                 },
                 step: function() {
+                    // evaluate the fitness of each member of the population
+                    chromosomes.forEach(function(c){c.fitness(players);});
 
+                    // rank them according to their fitness
+                    chromosomes.sort(function(a,b){return a.getFitness() -
+                    b.getFitness()});
+
+                    if (chromosomes[0].getFitness() < bestScore){
+                        best = chromosomes[0];
+                        bestScore = chromosomes[0].getFitness();
+                        console.log('New Top fitness: %.2f', chromosomes[0].getFitness());
+                        chromosomes[0].printRounds(players);
+                    }
+
+                    // cull population
+                    nCull = Math.round(chromosomes.length*cullRate);
+                    chromosomes.splice(chromosomes.length-nCull, nCull);
+
+                    // reproduce remaining population
+                    var lastParent = chromosomes.length-1;
+                    while (chromosomes.length < populationSize) {
+                        var iParent1 = Math.round(Math.random()*lastParent);
+                        var iParent2 = Math.round(Math.random()*lastParent);
+                        while (iParent1 == iParent2){
+                            iParent2 = Math.round(Math.random()*lastParent);
+                        }
+                        chromosomes.push(chromosomes[iParent1].crossover(chromosomes[iParent2], 0.5));
+                    }
+
+                    // mutate all members
+                    chromosomes.forEach(function(chromosome){
+                        chromosome.mutate(0.001);
+                    });
 
                 }
             }
@@ -190,6 +387,10 @@
         console.log(ga);
 
         ga.init(players, courts);
+        for (stp = 0; stp < 1000; stp++){
+            console.log("Step: %d--------------------------------------------------------------------------", stp);
+            ga.step();
+        }
     })();
     </script>
 </body>
